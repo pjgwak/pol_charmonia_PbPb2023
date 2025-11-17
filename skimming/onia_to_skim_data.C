@@ -14,6 +14,15 @@ static const long MAXTREESIZE = 1000000000000;
 TVector3 MuPlusVector_Helicity(const TLorentzVector &QQLV_Lab, const TLorentzVector &MuPlusLV_Lab);
 TVector3 MuPlusVector_CollinsSoper(const TLorentzVector &QQLV_Lab, const TLorentzVector &MuPlusLV_Lab);
 
+// 
+bool muonAccSoft2018(double pt, double eta)
+{
+  return ((fabs(eta) < 0.3 && pt > 3.4) ||
+          (0.3 < fabs(eta) && fabs(eta) < 1.1 && pt > 3.3) ||
+          (1.1 < fabs(eta) && fabs(eta) < 1.5 && pt > 9.08 - 5.25*fabs(eta)) ||
+          (1.5 < fabs(eta) && fabs(eta) < 2.4 && pt > 0.8 && pt>2.4-0.8*fabs(eta)));
+}
+
 void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
 {
   cout << "Start onia_to_skim_data()\n";
@@ -80,6 +89,10 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
   Int_t Reco_mu_SelectionType[maxBranchSize];
   Int_t Reco_mu_whichGen[maxBranchSize]; // MC
 
+  Bool_t Reco_mu_isSoftCutBased[maxBranchSize];
+  Bool_t Reco_mu_isGlobal[maxBranchSize];
+  Bool_t Reco_mu_isTracker[maxBranchSize];
+
   // ----- SetBranchAddress -----
   oniaTree->SetBranchAddress("runNb", &runNb);
   oniaTree->SetBranchAddress("eventNb", &eventNb);
@@ -122,6 +135,10 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
   oniaTree->SetBranchAddress("Reco_mu_nPixValHits", Reco_mu_nPixValHits);
   oniaTree->SetBranchAddress("Reco_mu_SelectionType", Reco_mu_SelectionType);
 
+  oniaTree->SetBranchAddress("Reco_mu_isSoftCutBased", Reco_mu_isSoftCutBased);
+  oniaTree->SetBranchAddress("Reco_mu_isGlobal", Reco_mu_isGlobal);
+  oniaTree->SetBranchAddress("Reco_mu_isTracker", Reco_mu_isTracker);
+
   // MC only
   if (isMC)
   {
@@ -132,7 +149,7 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
   // ===== set output file and  FlowSkim branch address (output) =====
     // ----- bit mask - change here -----
   // int trigIndx = 0;
-  int kTrigSel = myTrig; // 24:HLT_HIMinimumBiasHF1ANDZDC1nOR_v
+  // int kTrigSel = myTrig; // 24:HLT_HIMinimumBiasHF1ANDZDC1nOR_v
   // if (kTrigSel == kTrigJpsipp) trigIndx = 0; // PbPb : 0
   // else if (kTrigSel == kTrigUps) trigIndx = 1;
   // else if (kTrigSel == kTrigL1DBOS40100) trigIndx = 2;
@@ -176,7 +193,7 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
   TLorentzVector *mupl_Reco = new TLorentzVector;
   TLorentzVector *mumi_Reco = new TLorentzVector;
 
-  TFile *fFlowSkim = new TFile(Form("skim_files/flowSkim_PbPb2023_isMC%d_trigger%d.root", isMC, kTrigSel), "recreate");
+  TFile *fFlowSkim = new TFile(Form("skim_files/flowSkim_PbPb2023_isMC%d_MinBias.root", isMC), "recreate");
 
   // fFlowSkim->SetCompressionSettings(207); // LZMA: 207, ZLIB: 1xx
   TTree *flowTree = new TTree("myTree", "");
@@ -239,7 +256,7 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
   for (long iev = 0; iev < nEvt; ++iev)
   {
     // print progress
-    if (iev % 100000 == 0)
+    if (iev % 1000000 == 0)
     {
       cout << ">>>>> EVENT " << iev << " / " << nTot
                 << " (" << int(100. * iev / max<Long64_t>(1, nTot)) << "%)\n";
@@ -279,14 +296,16 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
       Gen_weight_ = Gen_weight;
     }
 
-    // apply HLT
-    bool HLTPass=false;
-    // if((HLTriggers&((ULong64_t)pow(2, 24))) == ((ULong64_t)pow(2, 24))
-    //   || (HLTriggers&((ULong64_t)pow(2, 25))) == ((ULong64_t)pow(2, 25))
-    //   || (HLTriggers&((ULong64_t)pow(2, 26))) == ((ULong64_t)pow(2, 26)) ) HLTPass=true;
+    if (TMath::Abs(vz) > 15) continue;
 
-    if((HLTriggers&((ULong64_t)pow(2, kTrigSel))) == ((ULong64_t)pow(2, kTrigSel))) HLTPass=true;
-    if(HLTPass==false) continue;
+    // // apply HLT
+    // bool HLTPass=false;
+    // // if((HLTriggers&((ULong64_t)pow(2, 24))) == ((ULong64_t)pow(2, 24))
+    // //   || (HLTriggers&((ULong64_t)pow(2, 25))) == ((ULong64_t)pow(2, 25))
+    // //   || (HLTriggers&((ULong64_t)pow(2, 26))) == ((ULong64_t)pow(2, 26)) ) HLTPass=true;
+
+    // if((HLTriggers&((ULong64_t)pow(2, kTrigSel))) == ((ULong64_t)pow(2, kTrigSel))) HLTPass=true;
+    // if(HLTPass==false) continue;
     
     // check dimoun number
     if (Reco_QQ_size<0) continue;
@@ -334,28 +353,43 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
         if (Reco_mu_whichGen[Reco_QQ_mumi_idx[irqq]] == -1) continue;
       }
 
-      // selection bits
-      const bool passMuonTypePl =
-          ((Reco_mu_SelectionType[iMuPl] & (1 << 1)) != 0) &&
-          ((Reco_mu_SelectionType[iMuPl] & (1 << 3)) != 0);
-      const bool passMuonTypeMi =
-          ((Reco_mu_SelectionType[iMuMi] & (1 << 1)) != 0) &&
-          ((Reco_mu_SelectionType[iMuMi] & (1 << 3)) != 0);
+      // isSoftCutBased
+      if (!Reco_mu_isSoftCutBased[iMuPl] || !Reco_mu_isSoftCutBased[iMuMi]) continue;
+
+      // dimuon y < 2.4 and single muon acceptance cut - 2018 soft
+      if ( !(TMath::Abs(JP.Rapidity()) < 2.4) ||
+           !muonAccSoft2018(mupl.Pt(), mupl.Eta()) ||
+           !muonAccSoft2018(mumi.Pt(), mumi.Eta())) continue;
+
+      // isGlobal - all muons in the test file pass isTracker
+      if (!Reco_mu_isGlobal[iMuPl] || !Reco_mu_isGlobal[iMuMi]) continue;
+      if (!Reco_mu_isTracker[iMuPl] || !Reco_mu_isTracker[iMuMi]) continue;
+
+      // vertex probability cut
+      if (Reco_QQ_VtxProb[irqq] < 0.01f) continue;
+
+      // // selection bits
+      // const bool passMuonTypePl =
+      //     ((Reco_mu_SelectionType[iMuPl] & (1 << 1)) != 0) &&
+      //     ((Reco_mu_SelectionType[iMuPl] & (1 << 3)) != 0);
+      // const bool passMuonTypeMi =
+      //     ((Reco_mu_SelectionType[iMuMi] & (1 << 1)) != 0) &&
+      //     ((Reco_mu_SelectionType[iMuMi] & (1 << 3)) != 0);
       
-      // soft id cut
-      const bool muplSoft =
-          (Reco_mu_nTrkWMea[iMuPl] > 5) &&
-          (Reco_mu_nPixWMea[iMuPl] > 0) &&
-          (std::fabs(Reco_mu_dxy[iMuPl]) < 0.3f) &&
-          (std::fabs(Reco_mu_dz[iMuPl]) < 20.f) &&
-          passMuonTypePl && Reco_mu_highPurity[Reco_QQ_mupl_idx[iMuPl]]==true;
-      const bool mumiSoft =
-          (Reco_mu_nTrkWMea[iMuMi] > 5) &&
-          (Reco_mu_nPixWMea[iMuMi] > 0) &&
-          (std::fabs(Reco_mu_dxy[iMuMi]) < 0.3f) &&
-          (std::fabs(Reco_mu_dz[iMuMi]) < 20.f) &&
-          passMuonTypeMi && Reco_mu_highPurity[Reco_QQ_mumi_idx[iMuMi]]==true;
-      if (!(muplSoft && mumiSoft)) continue;
+      // // soft id cut
+      // const bool muplSoft =
+      //     (Reco_mu_nTrkWMea[iMuPl] > 5) &&
+      //     (Reco_mu_nPixWMea[iMuPl] > 0) &&
+      //     (std::fabs(Reco_mu_dxy[iMuPl]) < 0.3f) &&
+      //     (std::fabs(Reco_mu_dz[iMuPl]) < 20.f) &&
+      //     passMuonTypePl && Reco_mu_highPurity[Reco_QQ_mupl_idx[iMuPl]]==true;
+      // const bool mumiSoft =
+      //     (Reco_mu_nTrkWMea[iMuMi] > 5) &&
+      //     (Reco_mu_nPixWMea[iMuMi] > 0) &&
+      //     (std::fabs(Reco_mu_dxy[iMuMi]) < 0.3f) &&
+      //     (std::fabs(Reco_mu_dz[iMuMi]) < 20.f) &&
+      //     passMuonTypeMi && Reco_mu_highPurity[Reco_QQ_mumi_idx[iMuMi]]==true;
+      // if (!(muplSoft && mumiSoft)) continue;
 
       // vertex probability cut
       if (Reco_QQ_VtxProb[irqq] < 0.01f) continue;
@@ -368,6 +402,8 @@ void onia_to_skim_data(int myTrig=24, bool isMC = false, long nEvt = -1)
       Double_t tnp_trig_w_mi = -1.0;
 
       recoQQsign[irqq] = Reco_QQ_sign[irqq];
+
+      if (Reco_QQ_sign[irqq] != 0) continue;
 
       // ----- HX, CS transformation -----
       // HX
