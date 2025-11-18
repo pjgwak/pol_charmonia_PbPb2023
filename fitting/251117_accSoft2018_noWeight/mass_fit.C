@@ -1,6 +1,6 @@
 using namespace RooFit;
 
-void mass_fit(float ptLow = 20, float ptHigh = 50, float yLow = 0, float yHigh = 1.6, bool isSkipFit = false)
+void mass_fit(float ptLow = 20, float ptHigh = 50, float yLow = 0, float yHigh = 1.6, float cosLow = 0.8, float cosHigh = 0.9, bool isSkipFit = false)
 {
 	cout << "=== start mass_fit() ===\n";
   TStopwatch time;
@@ -79,7 +79,8 @@ void mass_fit(float ptLow = 20, float ptHigh = 50, float yLow = 0, float yHigh =
 
   // === set cuts 1 ===
   cout << "\n=== make cuts 1 ===\n";
-  string reduceDS_woCtErr = Form("(pt >= %.3f && pt < %.3f && abs(y) >= %.3f && abs(y) < %.3f)",  ptLow, ptHigh, yLow, yHigh);
+  // string reduceDS_woCtErr = Form("(pt >= %.3f && pt < %.3f && abs(y) >= %.3f && abs(y) < %.3f)",  ptLow, ptHigh, yLow, yHigh);
+  string reduceDS_woCtErr = Form("(pt >= %.3f && pt < %.3f && abs(y) >= %.3f && abs(y) < %.3f && cosHX > %.3f && cosHX < %.3f)",  ptLow, ptHigh, yLow, yHigh, cosLow, cosHigh);
 
 	// string reduceDS_woCtErr = Form("(pt >= %.3f && pt < %.3f && abs(y) >= %.3f && abs(y) < %.3f && mass >= %.3f && mass < %.3f && ctau3D >= %.3f && ctau3D < %.3f)",  ptLow, ptHigh, yLow, yHigh, massLow, massHigh, ctLow, ctHigh);
 
@@ -397,14 +398,14 @@ void mass_fit(float ptLow = 20, float ptHigh = 50, float yLow = 0, float yHigh =
       tc.DrawLatex(0.82, 0.86, Form("#chi^{2}/ndf = %.2f", chi2ndf));
       cout << "\nchi2/ndf = " << chi2ndf << "\n\n";
     }
-    c.SaveAs(Form("%s/mass_fit_pT%.1f_%.1f.png", figDir.Data(), ptLow, ptHigh)); 
+    c.SaveAs(Form("%s/mass_fit_pT%.1f_%.1f_cosHX%.1f_%.1f.png", figDir.Data(), ptLow, ptHigh, cosLow, cosHigh));
   }
 
   // --- save results ---
   ws->import(massFitModel);
 
   fitMass->Print("V");
-  TFile outMass(Form("%s/mass_fit_pT%.1f_%.1f.root", rootDir.Data(), ptLow, ptHigh), "RECREATE");
+  TFile outMass(Form("%s/mass_fit_pT%.1f_%.1f_cosHX%.1f_%.1f.root", rootDir.Data(), ptLow, ptHigh, cosLow, cosHigh), "RECREATE");
   fitMass->Write("fitMass");
   ws->Write("wsMass");
 	// massFitModel.Write();

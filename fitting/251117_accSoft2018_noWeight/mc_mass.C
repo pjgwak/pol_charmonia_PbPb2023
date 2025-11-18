@@ -1,6 +1,6 @@
 using namespace RooFit;
 
-void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh = 2.4)
+void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh = 2.4, bool isSkipFit = true)
 {
 	cout << "=== start mc_mass() ===\n";
   TStopwatch time;
@@ -147,7 +147,7 @@ void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh 
   // RooChebychev massBkgPdf("massBkgPdf", "", *ws->var("mass"), RooArgList(massSl1, massSl2, massSl3)); //7.5-8.5
   RooChebychev massBkgPdf("massBkgPdf", "", *ws->var("mass"), RooArgList(massSl1)); // low pt: 9.5-11, 11-13
 
-  // --- fit ---
+  // --- model ---
   RooRealVar nSigMass("nSigMass", "mass signal yield", 1e5, 1e4, 1e6);
   RooRealVar nBkgMass("nBkgMass", "mass bkg yield", 1000, 1, 1e8);
   RooAddPdf massFitModel("massFitModel", "",
@@ -155,9 +155,38 @@ void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh 
                   RooArgList(nSigMass));
 
   // --- fit ---
-  RooFitResult *fitMcMass;
+  // helper function
+  auto syncVar = [](RooRealVar& v, const RooFitResult& fr) {
+    auto findIn = [&](const RooArgList& lst) -> const RooRealVar* {
+      if (auto* a = lst.find(v.GetName())) return dynamic_cast<const RooRealVar*>(a);
+      return nullptr;
+    };
+    const RooRealVar* src = nullptr;
+    if (!(src = findIn(fr.floatParsFinal())))
+        src = findIn(fr.constPars());
+    if (!src) return false;
+    v.setVal(src->getVal());
+    v.setError(src->getError());
+    return true;
+  };
 
-	fitMcMass = massFitModel.fitTo(*redData, Offset(true), Save(), Extended(), PrintLevel(-1), PrintEvalErrors(-1), RecoverFromUndefinedRegions(2), NumCPU(32)); //, EvalBackend("legacy")
+  RooFitResult *fitMcMass;
+  if (isSkipFit && !gSystem->AccessPathName(Form("%s/mc_mass_pT%.1f_%.1f.root", rootDir.Data(), ptLow, ptHigh), kReadPermission)) {
+    TFile fin(Form("%s/mc_mass_pT%.1f_%.1f.root", rootDir.Data(), ptLow, ptHigh), "READ");
+    RooFitResult* tmp = nullptr; fin.GetObject("fitMcMass", tmp);
+    if (tmp) fitMcMass = (RooFitResult*) tmp->Clone("fitMcMass");
+
+    syncVar(alphaL, *fitMcMass); 
+    syncVar(alphaLR, *fitMcMass);
+    syncVar(fCB1, *fitMcMass);
+    syncVar(massMean, *fitMcMass);
+    syncVar(massSigma1, *fitMcMass);
+    syncVar(massSigma1G, *fitMcMass);
+    syncVar(nL, *fitMcMass);
+    syncVar(nLR, *fitMcMass);
+    syncVar(nSigMass, *fitMcMass);
+  } 
+	else fitMcMass = massFitModel.fitTo(*redData, Offset(true), Save(), Extended(), PrintLevel(-1), PrintEvalErrors(-1), RecoverFromUndefinedRegions(2), NumCPU(32)); //, EvalBackend("legacy")
 
 	// alphaL.setConstant();
 
@@ -180,7 +209,6 @@ void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh 
     massFitModel.plotOn(fr, Range("massRange"), Name("model"));
     massFitModel.plotOn(fr, Range("massRange"), Components("DCB"), Name("DCB"), LineStyle(kDotted), LineColor(kRed));
     massFitModel.plotOn(fr, Range("massRange"), Components("massG"), Name("G"), LineStyle(kDotted), LineColor(kGreen));
-    massFitModel.plotOn(fr, Range("massRange"), Components("massBkgPdf"), Name("bkg"), LineStyle(kDotted), LineColor(kAzure));
 
     // --- dynamic y-range for log scale ---
     double ymin = 1e300, ymax = -1e300;
@@ -219,8 +247,6 @@ void mc_mass(float ptLow = 20, float ptHigh = 50, float yLow = 1.6, float yHigh 
         leg.AddEntry(o, "DCB", "pe");
       if (auto *o = findObj(fr, "G"))
         leg.AddEntry(o, "Gauss", "pe");
-      if (auto *o = findObj(fr, "bkg"))
-        leg.AddEntry(o, "Bkg", "pe");
 
       leg.Draw("same");
     }
